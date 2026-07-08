@@ -1,6 +1,6 @@
 # gh-blast-radius
 
-[![PyPI version](https://badge.fury.io/py/gh-blast-radius.svg)](https://badge.fury.io/py/gh-blast-radius)
+[![PyPI version](https://img.shields.io/pypi/v/gh-blast-radius.svg)](https://pypi.org/project/gh-blast-radius/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **`gh-blast-radius`** is an open-source CLI tool and GitHub Action that maps the dependency graph of GitHub Actions reusable workflows and composite actions across your entire GitHub organization. 
