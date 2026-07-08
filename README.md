@@ -9,7 +9,7 @@ It answers the question: *"If I change this shared workflow, what breaks?"*
 
 ---
 
-## 🛑 The Problem
+## The Problem
 
 Platform and DevEx teams build shared GitHub Actions reusable workflows (e.g., `uses: myorg/shared/.github/workflows/build.yml@v2`) and composite actions that dozens or hundreds of other repositories depend on. 
 
