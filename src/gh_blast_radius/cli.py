@@ -314,6 +314,10 @@ def diff(
         str,
         typer.Option("--format", "-f", help="Output format: 'table' or 'json'."),
     ] = "table",
+    fail_on_breaking: Annotated[
+        bool,
+        typer.Option("--fail-on-breaking", help="Exit with code 1 if there are breaking changes."),
+    ] = False,
 ) -> None:
     """Compare two versions of a shared workflow and report what would break."""
     if not token:
@@ -408,6 +412,9 @@ def diff(
         f"[green]Unaffected: {summary['unaffected']}[/]"
     )
 
+    if fail_on_breaking and summary["breaking"] > 0:
+        raise typer.Exit(code=1)
+
 
 # ---------------------------------------------------------------------------
 # stats
@@ -415,18 +422,36 @@ def diff(
 
 
 @app.command()
-def stats() -> None:
-    """Show summary statistics about the dependency graph.
-
-    Displays: total shared workflows/actions, total consumer edges,
-    widest blast radius (most consumers), and ref distribution.
-    """
-    console.print(
-        Panel(
-            "[yellow]⚠ stats command is not yet implemented.[/]\n\n"
-            "Will display summary statistics from the persisted graph.",
-            title="[bold]gh-blast-radius stats[/]",
-            border_style="yellow",
+def stats(
+    org: Annotated[str, typer.Option("--org", "-o", help="GitHub organization.")],
+) -> None:
+    """Show summary statistics about the dependency graph."""
+    graph_path = Path(".workflow-impact") / f"{org}_graph.json"
+    if not graph_path.exists():
+        err_console.print(
+            f"[red]Error: Graph not found for org '{org}'. "
+            f"Run `gh-blast-radius scan --org {org}` first.[/]"
         )
-    )
-    raise typer.Exit(code=1)
+        raise typer.Exit(code=1)
+
+    graph = load_graph(graph_path)
+    
+    basic_stats = graph.get_stats()
+    
+    # Calculate blast radius distribution
+    widest_radius = 0
+    widest_ref = ""
+    for producer_id, node in graph.producers.items():
+        consumers = graph.get_consumers(node.ref)
+        if len(consumers) > widest_radius:
+            widest_radius = len(consumers)
+            widest_ref = producer_id
+
+    table = Table(title=f"Graph Statistics: {org}", show_header=False)
+    table.add_row("Total Shared Workflows/Actions", str(basic_stats["total_producers"]))
+    table.add_row("Total Consumer Repositories", str(basic_stats["total_consumers"]))
+    table.add_row("Total Dependency Edges", str(basic_stats["total_edges"]))
+    if widest_ref:
+        table.add_row("Widest Blast Radius", f"{widest_ref} ({widest_radius} consumers)")
+
+    console.print(table)

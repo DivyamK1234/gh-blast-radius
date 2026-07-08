@@ -1,0 +1,52 @@
+name: "GitHub Actions Blast Radius"
+description: "Detect breaking changes to shared workflows and composite actions before you merge."
+inputs:
+  github_token:
+    description: "GitHub Token with repo scope"
+    required: true
+    default: "${{ github.token }}"
+  org:
+    description: "GitHub Organization to crawl"
+    required: true
+    default: "${{ github.repository_owner }}"
+  workflow_ref:
+    description: "The workflow or action ref (e.g. myorg/repo/.github/workflows/build.yml)"
+    required: true
+  old_ref:
+    description: "The old git ref to compare against (e.g. PR base SHA)"
+    required: true
+  new_ref:
+    description: "The new git ref (e.g. PR head SHA)"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install gh-blast-radius
+      shell: bash
+      run: pip install ${{ github.action_path }}
+
+    - name: Scan Organization
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+      run: |
+        echo "Scanning organization ${{ inputs.org }}..."
+        gh-blast-radius scan --org ${{ inputs.org }}
+
+    - name: Run Impact Analysis
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+      run: |
+        echo "Running impact analysis for ${{ inputs.workflow_ref }}..."
+        gh-blast-radius diff \
+          ${{ inputs.workflow_ref }} \
+          --old ${{ inputs.old_ref }} \
+          --new ${{ inputs.new_ref }} \
+          --fail-on-breaking
