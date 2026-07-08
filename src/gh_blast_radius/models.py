@@ -129,6 +129,7 @@ class ConsumerEdge:
         permissions: Permissions block at the job level, if any.
     """
 
+    target: WorkflowRef
     consumer_repo: str
     consumer_workflow: str
     job_name: str
