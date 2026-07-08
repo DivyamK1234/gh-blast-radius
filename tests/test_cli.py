@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import re
+
 from typer.testing import CliRunner
 
 from gh_blast_radius.cli import app
 
 runner = CliRunner()
+
+
+def strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences so assertions work in CI."""
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
 class TestCLIBasics:
@@ -20,14 +27,16 @@ class TestCLIBasics:
     def test_help(self) -> None:
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0
-        assert "blast radius" in result.output.lower() or "gh-blast-radius" in result.output
+        out = strip_ansi(result.output).lower()
+        assert "blast radius" in out or "gh-blast-radius" in out
 
     def test_no_args_shows_help(self) -> None:
         result = runner.invoke(app, [])
         # Typer exits with code 0 or 2 when no_args_is_help triggers (version-dependent)
         assert result.exit_code in (0, 2)
         # Should show help text regardless
-        assert "Usage" in result.output or "usage" in result.output
+        out = strip_ansi(result.output)
+        assert "Usage" in out or "usage" in out
 
 
 class TestScanCommand:
@@ -45,8 +54,9 @@ class TestScanCommand:
     def test_scan_help(self) -> None:
         result = runner.invoke(app, ["scan", "--help"])
         assert result.exit_code == 0
-        assert "org" in result.output
-        assert "full-rescan" in result.output
+        out = strip_ansi(result.output)
+        assert "--org" in out
+        assert "--full-rescan" in out
 
 
 class TestConsumersCommand:
@@ -64,8 +74,9 @@ class TestConsumersCommand:
     def test_consumers_help(self) -> None:
         result = runner.invoke(app, ["consumers", "--help"])
         assert result.exit_code == 0
-        assert "transitive" in result.output
-        assert "format" in result.output
+        out = strip_ansi(result.output)
+        assert "--transitive" in out
+        assert "--format" in out
 
 
 class TestDepsCommand:
@@ -104,9 +115,10 @@ class TestDiffCommand:
     def test_diff_help(self) -> None:
         result = runner.invoke(app, ["diff", "--help"])
         assert result.exit_code == 0
-        assert "WORKFLOW_REF" in result.output
-        assert "old" in result.output
-        assert "new" in result.output
+        out = strip_ansi(result.output)
+        assert "WORKFLOW_REF" in out
+        assert "--old" in out
+        assert "--new" in out
 
 
 class TestStatsCommand:
