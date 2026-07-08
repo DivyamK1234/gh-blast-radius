@@ -140,6 +140,7 @@ class TestModelsImport:
 
         ref = WorkflowRef(org="o", repo="r", path="p")
         consumer = ConsumerEdge(
+            target=ref,
             consumer_repo="o/c",
             consumer_workflow=".github/workflows/ci.yml",
             job_name="build",
