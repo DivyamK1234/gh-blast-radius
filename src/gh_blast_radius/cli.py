@@ -19,8 +19,9 @@ from rich.table import Table
 
 from gh_blast_radius import __version__
 from gh_blast_radius.crawler import OrgCrawler
+from gh_blast_radius.diff import compute_impact
 from gh_blast_radius.github_client import GitHubClient
-from gh_blast_radius.parser import parse_workflow_ref
+from gh_blast_radius.parser import parse_producer_interface, parse_workflow_ref
 from gh_blast_radius.storage import load_graph, save_graph
 
 app = typer.Typer(
@@ -277,51 +278,135 @@ def deps(
 
 @app.command()
 def diff(
-    workflow: Annotated[
+    workflow_ref: Annotated[
         str,
-        typer.Option(
-            "--workflow",
-            "-w",
-            help="Path to the shared workflow file within its repo.",
+        typer.Argument(
+            help=(
+                "Shared workflow or action reference, "
+                "e.g. 'myorg/shared-workflows/.github/workflows/build.yml'"
+            ),
         ),
     ],
     old: Annotated[
         str,
         typer.Option(
             "--old",
-            help="Old version: a git ref (e.g. 'main', 'v1') or a local file path.",
+            help="Old version: a git ref (e.g. 'main', 'v1').",
         ),
     ],
     new: Annotated[
         str,
         typer.Option(
             "--new",
-            help="New version: a git ref (e.g. 'feature-branch') or a local file path.",
+            help="New version: a git ref (e.g. 'feature-branch').",
         ),
     ],
+    token: Annotated[
+        str | None,
+        typer.Option(
+            "--token",
+            "-t",
+            help="GitHub personal access token. Defaults to GITHUB_TOKEN env var.",
+            envvar="GITHUB_TOKEN",
+        ),
+    ] = None,
     output_format: Annotated[
         str,
         typer.Option("--format", "-f", help="Output format: 'table' or 'json'."),
     ] = "table",
 ) -> None:
-    """Compare two versions of a shared workflow and report what would break.
-
-    Analyzes the old and new YAML to detect removed inputs, renamed secrets,
-    permission changes, etc., and cross-references against all known consumers
-    to classify each as breaking, warning, or unaffected.
-    """
-    console.print(
-        Panel(
-            "[yellow]⚠ diff command is not yet implemented.[/]\n\n"
-            f"Workflow: [bold]{workflow}[/]\n"
-            f"Old: {old}\n"
-            f"New: {new}\n"
-            f"Format: {output_format}",
-            title="[bold]gh-blast-radius diff[/]",
-            border_style="yellow",
+    """Compare two versions of a shared workflow and report what would break."""
+    if not token:
+        err_console.print(
+            "[red]Error: GITHUB_TOKEN environment variable not set, and --token not provided.[/]"
         )
+        raise typer.Exit(code=1)
+
+    ref = parse_workflow_ref(workflow_ref, "")
+    if not ref:
+        err_console.print(f"[red]Error: Invalid workflow reference '{workflow_ref}'.[/]")
+        raise typer.Exit(code=1)
+
+    graph_path = Path(".workflow-impact") / f"{ref.org}_graph.json"
+    if not graph_path.exists():
+        err_console.print(
+            f"[red]Error: Graph not found for org '{ref.org}'. "
+            f"Run `gh-blast-radius scan --org {ref.org}` first.[/]"
+        )
+        raise typer.Exit(code=1)
+
+    graph = load_graph(graph_path)
+    consumers = graph.get_consumers(ref, transitive=False)
+
+    client = GitHubClient(token=token)
+
+    producer_type = (
+        "reusable_workflow"
+        if (ref.path.endswith(".yml") or ref.path.endswith(".yaml"))
+        else "composite_action"
     )
-    raise typer.Exit(code=1)
+
+    try:
+        if producer_type == "reusable_workflow":
+            old_content = client.get_file_content(ref.org, ref.repo, ref.path, ref=old)
+            new_content = client.get_file_content(ref.org, ref.repo, ref.path, ref=new)
+        else:
+            old_content = client.get_action_manifest(ref.org, ref.repo, ref.path, ref=old)
+            new_content = client.get_action_manifest(ref.org, ref.repo, ref.path, ref=new)
+    except Exception as e:
+        err_console.print(f"[red]Error fetching files from GitHub:[/] {e}")
+        raise typer.Exit(code=1) from e
+
+    old_node = parse_producer_interface(old_content, producer_type, ref)
+    new_node = parse_producer_interface(new_content, producer_type, ref)
+
+    report = compute_impact(ref, old_node, new_node, consumers, old, new)
+
+    if output_format == "json":
+        import dataclasses
+        console.print(json.dumps(dataclasses.asdict(report), indent=2))
+        return
+
+    table = Table(
+        title=f"Impact Report: {workflow_ref} ({old} → {new})",
+        show_lines=True,
+    )
+    table.add_column("Severity", justify="center")
+    table.add_column("Consumer Repo", style="cyan", no_wrap=True)
+    table.add_column("Workflow", style="magenta")
+    table.add_column("Job (Step)", style="green")
+    table.add_column("Reasons")
+
+    for result in report.results:
+        if result.severity == "breaking":
+            sev_str = "[bold red]BREAKING[/]"
+        elif result.severity == "warning":
+            sev_str = "[bold yellow]WARNING[/]"
+        else:
+            sev_str = "[dim green]UNAFFECTED[/]"
+
+        c = result.consumer
+        step_str = f" (step {c.step_index})" if c.step_index is not None else ""
+        job_step = f"{c.job_name}{step_str}"
+        reasons_str = "\n".join(result.reasons) or "-"
+
+        table.add_row(
+            sev_str,
+            c.consumer_repo,
+            c.consumer_workflow,
+            job_step,
+            reasons_str,
+        )
+
+    console.print(table)
+
+    summary = report.summary
+    console.print(
+        f"\n[bold]Summary:[/] "
+        f"[red]Breaking: {summary['breaking']}[/] | "
+        f"[yellow]Warning: {summary['warning']}[/] | "
+        f"[green]Unaffected: {summary['unaffected']}[/]"
+    )
 
 
 # ---------------------------------------------------------------------------

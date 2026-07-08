@@ -92,17 +92,19 @@ class TestDiffCommand:
         result = runner.invoke(app, ["diff"])
         assert result.exit_code != 0
 
-    def test_diff_stub(self) -> None:
+    def test_diff_missing_graph(self) -> None:
         result = runner.invoke(
             app,
-            ["diff", "--workflow", ".github/workflows/build.yml", "--old", "main", "--new", "dev"],
+            ["diff", "org/repo/.github/workflows/build.yml", "--old", "main", "--new", "dev"],
+            env={"GITHUB_TOKEN": "dummy"},
         )
         assert result.exit_code == 1
+        assert "Graph not found for org 'org'" in result.output
 
     def test_diff_help(self) -> None:
         result = runner.invoke(app, ["diff", "--help"])
         assert result.exit_code == 0
-        assert "--workflow" in result.output
+        assert "WORKFLOW_REF" in result.output
         assert "--old" in result.output
         assert "--new" in result.output
 
