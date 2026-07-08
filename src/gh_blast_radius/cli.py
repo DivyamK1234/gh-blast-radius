@@ -312,7 +312,7 @@ def diff(
     ] = None,
     output_format: Annotated[
         str,
-        typer.Option("--format", "-f", help="Output format: 'table' or 'json'."),
+        typer.Option("--format", "-f", help="Output format: 'table', 'json', or 'markdown'."),
     ] = "table",
     fail_on_breaking: Annotated[
         bool,
@@ -370,6 +370,41 @@ def diff(
         import dataclasses
         console.print(json.dumps(dataclasses.asdict(report), indent=2))
         return
+        
+    summary = report.summary
+    
+    if output_format == "markdown":
+        lines = [
+            f"### Impact Report: `{workflow_ref}`",
+            f"Comparing `{old}` → `{new}`",
+            "",
+            "| Severity | Consumer Repo | Workflow | Job (Step) | Reasons |",
+            "|----------|---------------|----------|------------|---------|"
+        ]
+        
+        for result in report.results:
+            if result.severity == "breaking":
+                sev_str = "🛑 **BREAKING**"
+            elif result.severity == "warning":
+                sev_str = "⚠️ WARNING"
+            else:
+                sev_str = "✅ UNAFFECTED"
+
+            c = result.consumer
+            step_str = f" (step {c.step_index})" if c.step_index is not None else ""
+            job_step = f"{c.job_name}{step_str}"
+            reasons_str = "<br>".join(result.reasons) or "-"
+            
+            lines.append(f"| {sev_str} | `{c.consumer_repo}` | `{c.consumer_workflow}` | `{job_step}` | {reasons_str} |")
+        
+        lines.append("")
+        lines.append(f"**Summary:** 🛑 Breaking: {summary['breaking']} | ⚠️ Warning: {summary['warning']} | ✅ Unaffected: {summary['unaffected']}")
+        
+        print("\n".join(lines))
+        
+        if fail_on_breaking and summary["breaking"] > 0:
+            raise typer.Exit(code=1)
+        return
 
     table = Table(
         title=f"Impact Report: {workflow_ref} ({old} → {new})",
@@ -403,8 +438,7 @@ def diff(
         )
 
     console.print(table)
-
-    summary = report.summary
+    
     console.print(
         f"\n[bold]Summary:[/] "
         f"[red]Breaking: {summary['breaking']}[/] | "

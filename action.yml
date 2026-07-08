@@ -45,6 +45,22 @@ runs:
         GITHUB_TOKEN: ${{ inputs.github_token }}
       run: |
         echo "Running impact analysis for ${{ inputs.workflow_ref }}..."
+        
+        gh-blast-radius diff \
+          ${{ inputs.workflow_ref }} \
+          --old ${{ inputs.old_ref }} \
+          --new ${{ inputs.new_ref }} \
+          --format markdown \
+          > blast_radius_report.md
+          
+        # If running in a Pull Request, post the result as a comment
+        if [ "${{ github.event_name }}" == "pull_request" ]; then
+          gh pr comment ${{ github.event.pull_request.number }} -F blast_radius_report.md
+        else
+          cat blast_radius_report.md
+        fi
+        
+        # Now run it again just to trigger the fail-on-breaking exit code if needed
         gh-blast-radius diff \
           ${{ inputs.workflow_ref }} \
           --old ${{ inputs.old_ref }} \
