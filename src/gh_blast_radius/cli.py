@@ -370,9 +370,9 @@ def diff(
         import dataclasses
         console.print(json.dumps(dataclasses.asdict(report), indent=2))
         return
-        
+
     summary = report.summary
-    
+
     if output_format == "markdown":
         lines = [
             f"### Impact Report: `{workflow_ref}`",
@@ -381,7 +381,7 @@ def diff(
             "| Severity | Consumer Repo | Workflow | Job (Step) | Reasons |",
             "|----------|---------------|----------|------------|---------|"
         ]
-        
+
         for result in report.results:
             if result.severity == "breaking":
                 sev_str = "🛑 **BREAKING**"
@@ -394,14 +394,21 @@ def diff(
             step_str = f" (step {c.step_index})" if c.step_index is not None else ""
             job_step = f"{c.job_name}{step_str}"
             reasons_str = "<br>".join(result.reasons) or "-"
-            
-            lines.append(f"| {sev_str} | `{c.consumer_repo}` | `{c.consumer_workflow}` | `{job_step}` | {reasons_str} |")
-        
+
+            lines.append(
+                f"| {sev_str} | `{c.consumer_repo}` | `{c.consumer_workflow}` | "
+                f"`{job_step}` | {reasons_str} |"
+            )
+
         lines.append("")
-        lines.append(f"**Summary:** 🛑 Breaking: {summary['breaking']} | ⚠️ Warning: {summary['warning']} | ✅ Unaffected: {summary['unaffected']}")
-        
+        lines.append(
+            f"**Summary:** 🛑 Breaking: {summary['breaking']} | "
+            f"⚠️ Warning: {summary['warning']} | "
+            f"✅ Unaffected: {summary['unaffected']}"
+        )
+
         print("\n".join(lines))
-        
+
         if fail_on_breaking and summary["breaking"] > 0:
             raise typer.Exit(code=1)
         return
@@ -438,7 +445,7 @@ def diff(
         )
 
     console.print(table)
-    
+
     console.print(
         f"\n[bold]Summary:[/] "
         f"[red]Breaking: {summary['breaking']}[/] | "
@@ -469,9 +476,9 @@ def stats(
         raise typer.Exit(code=1)
 
     graph = load_graph(graph_path)
-    
+
     basic_stats = graph.get_stats()
-    
+
     # Calculate blast radius distribution
     widest_radius = 0
     widest_ref = ""

@@ -168,8 +168,7 @@ class TestListRepos:
             headers={
                 **_rate_limit_headers(),
                 "link": (
-                    '<https://api.github.com/orgs/test-org/repos?page=2&per_page=100>; '
-                    'rel="next"'
+                    '<https://api.github.com/orgs/test-org/repos?page=2&per_page=100>; rel="next"'
                 ),
             },
         )
@@ -211,9 +210,7 @@ class TestGetWorkflowFiles:
         assert files[0].path == ".github/workflows/ci.yml"
         assert files[1].path == ".github/workflows/deploy.yaml"
 
-    def test_returns_empty_for_missing_directory(
-        self, client: GitHubClient, httpx_mock
-    ) -> None:
+    def test_returns_empty_for_missing_directory(self, client: GitHubClient, httpx_mock) -> None:
         httpx_mock.add_response(status_code=404, json={"message": "Not Found"})
 
         files = client.get_workflow_files("org", "repo")
@@ -274,9 +271,7 @@ class TestGetFileContent:
 
 
 class TestCaching:
-    def test_cache_hit_avoids_second_request(
-        self, client: GitHubClient, httpx_mock
-    ) -> None:
+    def test_cache_hit_avoids_second_request(self, client: GitHubClient, httpx_mock) -> None:
         import base64
 
         content = "cached content"
@@ -301,9 +296,7 @@ class TestCaching:
         # Both requests hit the API for metadata, but second should use cache for content
         assert len(httpx_mock.get_requests()) == 2
 
-    def test_no_cache_when_disabled(
-        self, client_no_cache: GitHubClient, httpx_mock
-    ) -> None:
+    def test_no_cache_when_disabled(self, client_no_cache: GitHubClient, httpx_mock) -> None:
         import base64
 
         content = "no cache"
@@ -361,15 +354,18 @@ class TestErrorHandling:
     def test_server_error_retries(self, client: GitHubClient, httpx_mock) -> None:
         # First two attempts fail with 500, third succeeds
         httpx_mock.add_response(
-            status_code=500, json={"message": "Internal Server Error"},
+            status_code=500,
+            json={"message": "Internal Server Error"},
             headers=_rate_limit_headers(),
         )
         httpx_mock.add_response(
-            status_code=500, json={"message": "Internal Server Error"},
+            status_code=500,
+            json={"message": "Internal Server Error"},
             headers=_rate_limit_headers(),
         )
         httpx_mock.add_response(
-            status_code=200, json={"ok": True},
+            status_code=200,
+            json={"ok": True},
             headers=_rate_limit_headers(),
         )
 
@@ -385,21 +381,25 @@ class TestErrorHandling:
 
 class TestLinkHeaderParsing:
     def test_parses_next_link(self) -> None:
-        response = type("FakeResponse", (), {
-            "headers": {
-                "link": '<https://api.github.com/orgs/test/repos?page=2>; rel="next", '
-                        '<https://api.github.com/orgs/test/repos?page=5>; rel="last"'
-            }
-        })()
+        response = type(
+            "FakeResponse",
+            (),
+            {
+                "headers": {
+                    "link": '<https://api.github.com/orgs/test/repos?page=2>; rel="next", '
+                    '<https://api.github.com/orgs/test/repos?page=5>; rel="last"'
+                }
+            },
+        )()
         url = GitHubClient._parse_next_link(response)
         assert url == "https://api.github.com/orgs/test/repos?page=2"
 
     def test_returns_none_when_no_next(self) -> None:
-        response = type("FakeResponse", (), {
-            "headers": {
-                "link": '<https://api.github.com/orgs/test/repos?page=1>; rel="first"'
-            }
-        })()
+        response = type(
+            "FakeResponse",
+            (),
+            {"headers": {"link": '<https://api.github.com/orgs/test/repos?page=1>; rel="first"'}},
+        )()
         url = GitHubClient._parse_next_link(response)
         assert url is None
 
@@ -432,9 +432,7 @@ class TestGetActionManifest:
         result = client.get_action_manifest("org", "repo", ".github/actions/setup")
         assert result == content
 
-    def test_returns_none_when_neither_exists(
-        self, client: GitHubClient, httpx_mock
-    ) -> None:
+    def test_returns_none_when_neither_exists(self, client: GitHubClient, httpx_mock) -> None:
         httpx_mock.add_response(status_code=404, json={"message": "Not Found"})
         httpx_mock.add_response(status_code=404, json={"message": "Not Found"})
 

@@ -391,9 +391,7 @@ class GitHubClient:
                 )
                 time.sleep(wait)
 
-        raise GitHubClientError(
-            f"Request failed after {MAX_RETRIES} retries: {last_error}"
-        )
+        raise GitHubClientError(f"Request failed after {MAX_RETRIES} retries: {last_error}")
 
     def _paginate(
         self,
@@ -443,9 +441,7 @@ class GitHubClient:
                 if response.status_code == 404:
                     raise NotFoundError(f"Not found: GET {path}")
                 if response.status_code != 200:
-                    raise GitHubClientError(
-                        f"API error {response.status_code}: {response.text}"
-                    )
+                    raise GitHubClientError(f"API error {response.status_code}: {response.text}")
 
                 data = response.json()
                 if isinstance(data, list):

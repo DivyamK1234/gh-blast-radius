@@ -82,6 +82,7 @@ def parse_workflow_ref(uses_string: str, current_org_repo: str) -> WorkflowRef |
         org, repo = current_org_repo.split("/", 1)
         # Normalize by removing leading slashes and dots safely
         import re
+
         path = re.sub(r"^(\.\.?/)+", "", repo_path)
         return WorkflowRef(org=org, repo=repo, path=path, ref=ref)
 
@@ -197,9 +198,7 @@ def _extract_with_and_secrets(
     return inputs_passed, secrets_passed
 
 
-def parse_workflow_file(
-    content: str, current_org_repo: str, filepath: str
-) -> list[ConsumerEdge]:
+def parse_workflow_file(content: str, current_org_repo: str, filepath: str) -> list[ConsumerEdge]:
     """Extract ConsumerEdges from a normal GitHub workflow file.
 
     Finds reusable workflow calls at the job level and composite action
@@ -281,9 +280,7 @@ def parse_workflow_file(
     return edges
 
 
-def parse_action_file(
-    content: str, current_org_repo: str, filepath: str
-) -> list[ConsumerEdge]:
+def parse_action_file(content: str, current_org_repo: str, filepath: str) -> list[ConsumerEdge]:
     """Extract ConsumerEdges from a composite action (action.yml) file.
 
     Finds nested composite action calls in runs.steps.

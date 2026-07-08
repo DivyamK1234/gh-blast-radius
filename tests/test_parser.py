@@ -182,4 +182,3 @@ runs:
     assert install_deps.target.org == "myorg"
     assert install_deps.target.repo == "myrepo"
     assert install_deps.target.path == ".github/actions/install-deps"
-

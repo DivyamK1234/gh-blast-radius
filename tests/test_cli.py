@@ -112,9 +112,14 @@ class TestDiffCommand:
 class TestStatsCommand:
     """Test the stats command stub."""
 
-    def test_stats_stub(self) -> None:
+    def test_stats_missing_org(self) -> None:
         result = runner.invoke(app, ["stats"])
+        assert result.exit_code != 0
+
+    def test_stats_missing_graph(self) -> None:
+        result = runner.invoke(app, ["stats", "--org", "test-org"])
         assert result.exit_code == 1
+        assert "Graph not found for org 'test-org'" in result.output
 
     def test_stats_help(self) -> None:
         result = runner.invoke(app, ["stats", "--help"])
