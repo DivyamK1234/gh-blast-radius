@@ -19,14 +19,37 @@ Until now, there was no tooling to map which repos consume these shared resource
 
 ---
 
-## 🧠 How It Works Under The Hood
+## 🏗️ Architecture
 
-This tool is not just a text-searcher; it is a full deterministic graph engine.
+> For detailed diagrams including sequence flows, see [docs/architecture.md](docs/architecture.md).
 
-1. **Lazy Graph Resolution (`networkx`)**: The `scan` command acts as a spider. It crawls your organization using the GitHub API, parses the YAML of workflows looking for `uses:` keywords, and builds a Directed Graph using the `networkx` library. 
-2. **Deterministic YAML Parsing**: It uses `PyYAML` with custom safe-loaders to handle GitHub Actions edge cases (like parsing `on: true` without crashing). It maps exactly what inputs and secrets a consumer is passing to a producer.
-3. **Local Caching**: To avoid hammering the GitHub API, it caches file contents locally by their Git SHA. The resulting network is serialized into a single `.workflow-impact/org_graph.json` file.
-4. **Diff Engine**: When you run a `diff`, the tool fetches the old and new version of the YAML, computes the schema delta (e.g., "a new required input was added"), checks the graph to see exactly what every consumer is passing, and flags consumers that fail to meet the new schema.
+```mermaid
+graph TD
+    A["GitHub API\norg repos + contents"] --> B["Repo Crawler\nLists repos, fetches YAML"]
+    B --> C["Raw File Cache\nSHA-based, skips unchanged"]
+    B --> D["Workflow Parser\nResolves uses: chains"]
+    D --> E["Graph Builder\nnetworkx DiGraph"]
+    E <--> F["Local Graph Store\n.workflow-impact/*.json"]
+    E --> G["CLI\nscan · consumers · deps · stats · diff"]
+    E --> H["PR Comment Bot\nAuto impact report on PRs"]
+    G --> I["Terminal"]
+    H --> J["GitHub Pull Request\n🛑 Breaking change blocked"]
+
+    style B fill:#1f6feb,stroke:#1f6feb,color:#fff
+    style D fill:#1f6feb,stroke:#1f6feb,color:#fff
+    style E fill:#8957e5,stroke:#8957e5,color:#fff
+    style G fill:#238636,stroke:#238636,color:#fff
+    style H fill:#238636,stroke:#238636,color:#fff
+```
+
+### How it works
+
+1. **Repo Crawler** enumerates every repository via the GitHub API and fetches `.github/workflows/` YAML files.
+2. **Workflow Parser** uses `PyYAML` with custom safe-loaders (handling GitHub-specific quirks like `on: true`) to extract `inputs`, `secrets`, and `uses:` references.
+3. **Graph Builder** constructs a `networkx` Directed Graph mapping producers (shared workflows/actions) to consumers (repos that call them), including the exact inputs each consumer passes.
+4. **Local Graph Store** serializes the graph to `.workflow-impact/<org>_graph.json`, with SHA-based caching to avoid redundant API calls on subsequent scans.
+5. **Diff Engine** compares two YAML versions, computes schema deltas, and cross-references every consumer in the graph to flag breaking changes.
+6. **PR Comment Bot** runs the full pipeline inside GitHub Actions and posts a Markdown impact table directly on the Pull Request — then fails the CI check if any consumer would break.
 
 ---
 
