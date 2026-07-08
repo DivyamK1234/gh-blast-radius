@@ -499,3 +499,51 @@ def stats(
         table.add_row("Widest Blast Radius", f"{widest_ref} ({widest_radius} consumers)")
 
     console.print(table)
+
+
+# ---------------------------------------------------------------------------
+# visualize
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def visualize(
+    org: Annotated[str, typer.Option("--org", "-o", help="GitHub organization to visualize.")],
+) -> None:
+    """Generate a Mermaid.js diagram of the dependency graph."""
+    graph_path = Path(".workflow-impact") / f"{org}_graph.json"
+    if not graph_path.exists():
+        err_console.print(
+            f"[red]Error: Graph not found for org '{org}'. "
+            f"Run `gh-blast-radius scan --org {org}` first.[/]"
+        )
+        raise typer.Exit(code=1)
+
+    graph = load_graph(graph_path)
+
+    lines = []
+    lines.append("```mermaid")
+    lines.append("graph TD")
+
+    def clean_id(s: str) -> str:
+        return s.replace("/", "_").replace(".", "_").replace("-", "_")
+
+    for producer_id in graph.producers:
+        c_id = clean_id(producer_id)
+        label = producer_id.replace(f"{org}/", "")
+        lines.append(f'    {c_id}["{label}"]')
+        lines.append(f"    style {c_id} fill:#8957e5,color:#fff,stroke:none")
+
+    for consumer_id in graph.consumer_repos:
+        c_id = clean_id(consumer_id)
+        label = consumer_id.replace(f"{org}/", "")
+        lines.append(f'    {c_id}["{label}"]')
+        lines.append(f"    style {c_id} fill:#238636,color:#fff,stroke:none")
+
+    # Add edges
+    for u, v, data in graph.nx_graph.edges(data=True):
+        if "edges" in data:
+            lines.append(f"    {clean_id(u)} --> {clean_id(v)}")
+
+    lines.append("```")
+    print("\n".join(lines))

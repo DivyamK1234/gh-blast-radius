@@ -176,3 +176,20 @@ class TestModelsImport:
             ],
         )
         assert report.summary == {"breaking": 1, "warning": 0, "unaffected": 1}
+
+
+class TestVisualizeCommand:
+    """Test the visualize command stub."""
+
+    def test_visualize_missing_org(self) -> None:
+        result = runner.invoke(app, ["visualize"])
+        assert result.exit_code != 0
+
+    def test_visualize_missing_graph(self) -> None:
+        result = runner.invoke(app, ["visualize", "--org", "test-org"])
+        assert result.exit_code == 1
+        assert "Graph not found for org 'test-org'" in result.output
+
+    def test_visualize_help(self) -> None:
+        result = runner.invoke(app, ["visualize", "--help"])
+        assert result.exit_code == 0
