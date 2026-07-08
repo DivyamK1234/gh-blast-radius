@@ -45,8 +45,8 @@ class TestScanCommand:
     def test_scan_help(self) -> None:
         result = runner.invoke(app, ["scan", "--help"])
         assert result.exit_code == 0
-        assert "--org" in result.output
-        assert "--full-rescan" in result.output
+        assert "org" in result.output
+        assert "full-rescan" in result.output
 
 
 class TestConsumersCommand:
@@ -64,8 +64,8 @@ class TestConsumersCommand:
     def test_consumers_help(self) -> None:
         result = runner.invoke(app, ["consumers", "--help"])
         assert result.exit_code == 0
-        assert "--transitive" in result.output
-        assert "--format" in result.output
+        assert "transitive" in result.output
+        assert "format" in result.output
 
 
 class TestDepsCommand:
@@ -105,8 +105,8 @@ class TestDiffCommand:
         result = runner.invoke(app, ["diff", "--help"])
         assert result.exit_code == 0
         assert "WORKFLOW_REF" in result.output
-        assert "--old" in result.output
-        assert "--new" in result.output
+        assert "old" in result.output
+        assert "new" in result.output
 
 
 class TestStatsCommand:

@@ -183,6 +183,7 @@ def consumers(
 
     if output_format == "json":
         import dataclasses
+
         console.print(json.dumps([dataclasses.asdict(c) for c in consumers_list], indent=2))
         return
 
@@ -249,6 +250,7 @@ def deps(
 
     if output_format == "json":
         import dataclasses
+
         console.print(json.dumps([dataclasses.asdict(d) for d in deps_list], indent=2))
         return
 
@@ -368,6 +370,7 @@ def diff(
 
     if output_format == "json":
         import dataclasses
+
         console.print(json.dumps(dataclasses.asdict(report), indent=2))
         return
 
@@ -379,7 +382,7 @@ def diff(
             f"Comparing `{old}` → `{new}`",
             "",
             "| Severity | Consumer Repo | Workflow | Job (Step) | Reasons |",
-            "|----------|---------------|----------|------------|---------|"
+            "|----------|---------------|----------|------------|---------|",
         ]
 
         for result in report.results:
