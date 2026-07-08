@@ -53,9 +53,14 @@ class OrgCrawler:
 
         edges: list[ConsumerEdge] = []
         for file_info in workflow_files:
-            content = self.client.get_file_content(
-                org, repo_name, file_info.path, default_branch_sha
-            )
+            try:
+                content = self.client.get_file_content(
+                    org, repo_name, file_info.path, ref=default_branch_sha
+                )
+            except Exception as e:
+                logger.warning(f"Could not fetch {file_info.path} from {org}/{repo_name}: {e}")
+                continue
+
             if not content:
                 continue
 
@@ -64,7 +69,6 @@ class OrgCrawler:
 
         # For v1, we can also try to find composite actions in the repo.
         # This requires searching the repo tree for action.yml files.
-        # But wait, GitHub Actions can be anywhere. Using the git/trees API recursively
         # to find all `action.yml` files in a repo is one way.
         # Alternatively, we can just resolve producers lazily based on what is consumed!
         # Yes, lazy resolution is MUCH more efficient.
@@ -73,9 +77,6 @@ class OrgCrawler:
         for edge in edges:
             self.graph.add_consumer_edge(edge)
 
-            # Lazy-resolve the producer if it belongs to the same org
-            # (or if we want to trace everything, but usually we only care about our org)
-            # We'll resolve any producer that isn't already in the graph.
             target = edge.target
             producer_id = target.normalized().full_name
             if producer_id not in self.graph.producers:
@@ -83,28 +84,29 @@ class OrgCrawler:
 
     def _resolve_producer(self, target: WorkflowRef, consumer_sha: str) -> None:
         """Fetch and parse a producer to add it to the graph."""
-        # If it's a workflow
-        if target.path.endswith(".yml") or target.path.endswith(".yaml"):
-            content = self.client.get_file_content(target.org, target.repo, target.path, target.ref)
-            if content:
-                node = parse_producer_interface(content, "reusable_workflow", target)
-                self.graph.add_producer(node)
-        else:
-            # It's a composite action
-            content = self.client.get_action_manifest(
-                target.org, target.repo, target.path, target.ref
-            )
-            if content:
-                node = parse_producer_interface(content, "composite_action", target)
-                self.graph.add_producer(node)
-
-                # Recursively parse the composite action to find nested dependencies
-                nested_edges = parse_action_file(
-                    content, f"{target.org}/{target.repo}", f"{target.path}/action.yml"
+        try:
+            if target.path.endswith(".yml") or target.path.endswith(".yaml"):
+                content = self.client.get_file_content(
+                    target.org, target.repo, target.path, ref=target.ref
                 )
-                for edge in nested_edges:
-                    self.graph.add_consumer_edge(edge)
-                    # And recursively resolve those!
-                    producer_id = edge.target.normalized().full_name
-                    if producer_id not in self.graph.producers:
-                        self._resolve_producer(edge.target, target.ref or "")
+                if content:
+                    node = parse_producer_interface(content, "reusable_workflow", target)
+                    self.graph.add_producer(node)
+            else:
+                content = self.client.get_action_manifest(
+                    target.org, target.repo, target.path, ref=target.ref
+                )
+                if content:
+                    node = parse_producer_interface(content, "composite_action", target)
+                    self.graph.add_producer(node)
+
+                    nested_edges = parse_action_file(
+                        content, f"{target.org}/{target.repo}", f"{target.path}/action.yml"
+                    )
+                    for edge in nested_edges:
+                        self.graph.add_consumer_edge(edge)
+                        producer_id = edge.target.normalized().full_name
+                        if producer_id not in self.graph.producers:
+                            self._resolve_producer(edge.target, target.ref or "")
+        except Exception as e:
+            logger.warning(f"Could not resolve producer {target.full_name}: {e}")

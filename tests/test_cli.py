@@ -37,10 +37,10 @@ class TestScanCommand:
         result = runner.invoke(app, ["scan"])
         assert result.exit_code != 0  # Missing required --org
 
-    def test_scan_stub_prints_message(self) -> None:
-        result = runner.invoke(app, ["scan", "--org", "test-org"])
-        assert result.exit_code == 1  # Not implemented yet
-        assert "test-org" in result.output
+    def test_scan_missing_token(self) -> None:
+        result = runner.invoke(app, ["scan", "--org", "test-org"], env={"GITHUB_TOKEN": ""})
+        assert result.exit_code == 1
+        assert "GITHUB_TOKEN environment variable not set" in result.output
 
     def test_scan_help(self) -> None:
         result = runner.invoke(app, ["scan", "--help"])
@@ -56,9 +56,10 @@ class TestConsumersCommand:
         result = runner.invoke(app, ["consumers"])
         assert result.exit_code != 0  # Missing required argument
 
-    def test_consumers_stub(self) -> None:
+    def test_consumers_missing_graph(self) -> None:
         result = runner.invoke(app, ["consumers", "org/repo/.github/workflows/build.yml"])
         assert result.exit_code == 1
+        assert "Graph not found for org 'org'" in result.output
 
     def test_consumers_help(self) -> None:
         result = runner.invoke(app, ["consumers", "--help"])
@@ -74,9 +75,10 @@ class TestDepsCommand:
         result = runner.invoke(app, ["deps"])
         assert result.exit_code != 0
 
-    def test_deps_stub(self) -> None:
+    def test_deps_missing_graph(self) -> None:
         result = runner.invoke(app, ["deps", "myorg/frontend"])
         assert result.exit_code == 1
+        assert "Graph not found for org 'myorg'" in result.output
 
     def test_deps_help(self) -> None:
         result = runner.invoke(app, ["deps", "--help"])

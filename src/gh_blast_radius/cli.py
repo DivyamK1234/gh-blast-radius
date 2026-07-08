@@ -7,13 +7,21 @@ handling only argument parsing and output formatting.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Annotated
 
 import typer
 from rich.console import Console
 from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.table import Table
 
 from gh_blast_radius import __version__
+from gh_blast_radius.crawler import OrgCrawler
+from gh_blast_radius.github_client import GitHubClient
+from gh_blast_radius.parser import parse_workflow_ref
+from gh_blast_radius.storage import load_graph, save_graph
 
 app = typer.Typer(
     name="gh-blast-radius",
@@ -83,23 +91,43 @@ def scan(
         ),
     ] = False,
 ) -> None:
-    """Crawl a GitHub org and build/update the dependency graph.
+    """Crawl a GitHub org and build/update the dependency graph."""
+    if not token:
+        err_console.print(
+            "[red]Error: GITHUB_TOKEN environment variable not set, and --token not provided.[/]"
+        )
+        raise typer.Exit(code=1)
 
-    Scans every repo in the organization for reusable workflow and composite
-    action usage, builds the dependency graph, and persists it locally.
-    """
+    client = GitHubClient(token=token)
+    crawler = OrgCrawler(client)
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        progress.add_task(description=f"Scanning organization '{org}'...", total=None)
+        try:
+            graph = crawler.crawl_org(org, include_archived=include_archived)
+        except Exception as e:
+            err_console.print(f"[red]Error scanning organization:[/] {e}")
+            raise typer.Exit(code=1) from e
+
+    save_path = Path(".workflow-impact") / f"{org}_graph.json"
+    save_graph(graph, save_path)
+
+    stats = graph.get_stats()
     console.print(
         Panel(
-            "[yellow]⚠ scan command is not yet implemented.[/]\n\n"
-            f"Will scan org: [bold]{org}[/]\n"
-            f"Full rescan: {full_rescan}\n"
-            f"Include archived: {include_archived}\n"
-            f"Token: {'provided' if token else 'not provided (set GITHUB_TOKEN)'}",
-            title="[bold]gh-blast-radius scan[/]",
-            border_style="yellow",
+            f"Successfully scanned [bold]{org}[/].\n"
+            f"Producers found: {stats['total_producers']}\n"
+            f"Consumer repos: {stats['total_consumers']}\n"
+            f"Total dependency edges: {stats['total_edges']}\n\n"
+            f"Graph saved to [bold]{save_path}[/]",
+            title="[bold green]Scan Complete[/]",
+            border_style="green",
         )
     )
-    raise typer.Exit(code=1)
 
 
 # ---------------------------------------------------------------------------
@@ -135,17 +163,52 @@ def consumers(
     ] = "table",
 ) -> None:
     """List every repo/job/step that consumes a shared workflow or action."""
-    console.print(
-        Panel(
-            "[yellow]⚠ consumers command is not yet implemented.[/]\n\n"
-            f"Querying consumers of: [bold]{workflow_ref}[/]\n"
-            f"Transitive: {transitive}\n"
-            f"Format: {output_format}",
-            title="[bold]gh-blast-radius consumers[/]",
-            border_style="yellow",
+    # We need to know which org graph to load. For simplicity, we extract it from the workflow_ref
+    ref = parse_workflow_ref(workflow_ref, "")
+    if not ref:
+        err_console.print(f"[red]Error: Invalid workflow reference '{workflow_ref}'.[/]")
+        raise typer.Exit(code=1)
+
+    graph_path = Path(".workflow-impact") / f"{ref.org}_graph.json"
+    if not graph_path.exists():
+        err_console.print(
+            f"[red]Error: Graph not found for org '{ref.org}'. "
+            f"Run `gh-blast-radius scan --org {ref.org}` first.[/]"
         )
-    )
-    raise typer.Exit(code=1)
+        raise typer.Exit(code=1)
+
+    graph = load_graph(graph_path)
+    consumers_list = graph.get_consumers(ref, transitive=transitive)
+
+    if output_format == "json":
+        import dataclasses
+        console.print(json.dumps([dataclasses.asdict(c) for c in consumers_list], indent=2))
+        return
+
+    if not consumers_list:
+        console.print(f"[yellow]No consumers found for {workflow_ref}[/]")
+        return
+
+    table = Table(title=f"Consumers of {workflow_ref}", show_lines=True)
+    table.add_column("Consumer Repo", style="cyan", no_wrap=True)
+    table.add_column("Workflow", style="magenta")
+    table.add_column("Job (Step)", style="green")
+    table.add_column("Ref", style="blue")
+    table.add_column("Inputs Passed", style="yellow")
+
+    for c in consumers_list:
+        step_str = f" (step {c.step_index})" if c.step_index is not None else ""
+        job_step = f"{c.job_name}{step_str}"
+        inputs_str = ", ".join(f"{k}={v}" for k, v in c.inputs_passed.items())
+        table.add_row(
+            c.consumer_repo,
+            c.consumer_workflow,
+            job_step,
+            c.ref_used,
+            inputs_str or "-",
+        )
+
+    console.print(table)
 
 
 # ---------------------------------------------------------------------------
@@ -167,16 +230,44 @@ def deps(
     ] = "table",
 ) -> None:
     """List every shared workflow/action a given repo depends on."""
-    console.print(
-        Panel(
-            "[yellow]⚠ deps command is not yet implemented.[/]\n\n"
-            f"Querying dependencies of: [bold]{repo}[/]\n"
-            f"Format: {output_format}",
-            title="[bold]gh-blast-radius deps[/]",
-            border_style="yellow",
+    if "/" not in repo:
+        err_console.print("[red]Error: Repo must be in 'org/repo' format.[/]")
+        raise typer.Exit(code=1)
+
+    org = repo.split("/")[0]
+    graph_path = Path(".workflow-impact") / f"{org}_graph.json"
+    if not graph_path.exists():
+        err_console.print(
+            f"[red]Error: Graph not found for org '{org}'. "
+            f"Run `gh-blast-radius scan --org {org}` first.[/]"
         )
-    )
-    raise typer.Exit(code=1)
+        raise typer.Exit(code=1)
+
+    graph = load_graph(graph_path)
+    deps_list = graph.get_dependencies(repo)
+
+    if output_format == "json":
+        import dataclasses
+        console.print(json.dumps([dataclasses.asdict(d) for d in deps_list], indent=2))
+        return
+
+    if not deps_list:
+        console.print(f"[yellow]No dependencies found for {repo}[/]")
+        return
+
+    table = Table(title=f"Dependencies of {repo}", show_lines=True)
+    table.add_column("Target Org", style="cyan", no_wrap=True)
+    table.add_column("Target Repo", style="magenta")
+    table.add_column("Path", style="green")
+
+    for d in deps_list:
+        table.add_row(
+            d.org,
+            d.repo,
+            d.path or "-",
+        )
+
+    console.print(table)
 
 
 # ---------------------------------------------------------------------------
